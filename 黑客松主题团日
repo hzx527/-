@@ -1,1 +1,592 @@
 
+```html
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes, viewport-fit=cover">
+    <title>共建花园·邻里地图 | 可交互故事地图</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none; /* 避免拖动图片时产生边缘选中感，不影响点击 */
+        }
+
+        body {
+            background: #eaf7e6;   /* 柔和花园底色 */
+            font-family: system-ui, -apple-system, 'Segoe UI', 'Roboto', 'Noto Sans', sans-serif;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        /* 主卡片容器 */
+        .garden-container {
+            max-width: 1300px;
+            width: 100%;
+            background: #fffef7;
+            border-radius: 2rem;
+            box-shadow: 0 20px 35px -12px rgba(0, 32, 0, 0.25);
+            overflow: hidden;
+            transition: all 0.2s ease;
+        }
+
+        /* 头部介绍 */
+        .garden-header {
+            padding: 1.2rem 1.8rem;
+            background: #2c5e2e;
+            color: white;
+        }
+        .garden-header h1 {
+            font-size: 1.7rem;
+            font-weight: 600;
+            letter-spacing: -0.3px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .garden-header h1:before {
+            content: "🌼";
+            font-size: 1.8rem;
+        }
+        .garden-header p {
+            margin-top: 8px;
+            opacity: 0.9;
+            font-size: 0.95rem;
+        }
+        .reminder-badge {
+            background: #ffd966;
+            color: #2c5e2e;
+            border-radius: 40px;
+            padding: 5px 12px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            display: inline-block;
+            margin-top: 8px;
+        }
+
+        /* 地图展示区 - 相对定位，便于后期叠加效果 */
+        .map-area {
+            padding: 1.5rem 1.8rem 1.8rem 1.8rem;
+            background: #fef9e6;
+        }
+        .map-wrapper {
+            position: relative;
+            border-radius: 28px;
+            overflow: hidden;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+            background: #e2dccd;
+            text-align: center;
+        }
+        /* 图片自适应，且保证image map坐标按比例响应 (使用width:100% height:auto)  */
+        .interactive-map {
+            width: 100%;
+            height: auto;
+            display: block;
+            cursor: pointer;
+        }
+
+        /* 提示栏: 告诉用户哪些可点 */
+        .info-tip {
+            background: #edf7e7;
+            margin-top: 16px;
+            padding: 10px 16px;
+            border-radius: 60px;
+            display: inline-flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            font-size: 0.85rem;
+            color: #2b5c2c;
+            width: auto;
+            backdrop-filter: blur(2px);
+        }
+        .info-tip span {
+            background: #d4e2ca;
+            padding: 4px 12px;
+            border-radius: 30px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .info-tip i {
+            font-style: normal;
+            font-weight: bold;
+        }
+
+        /* 弹窗遮罩层 (模态框) */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(30, 40, 20, 0.75);
+            backdrop-filter: blur(3px);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            transition: all 0.2s;
+        }
+        .modal-card {
+            background: #ffffff;
+            max-width: 550px;
+            width: 90%;
+            border-radius: 2rem;
+            overflow: hidden;
+            box-shadow: 0 25px 45px rgba(0,0,0,0.3);
+            animation: fadeSlideUp 0.25s ease-out;
+        }
+        @keyframes fadeSlideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .modal-media {
+            width: 100%;
+            background: #eef2e6;
+            min-height: 200px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+        .modal-media img, 
+        .modal-media video {
+            width: 100%;
+            display: block;
+            object-fit: cover;
+            max-height: 320px;
+        }
+        .modal-media .placeholder-video {
+            background: #cbdcc0;
+            width: 100%;
+            padding: 48px 20px;
+            text-align: center;
+            color: #3f5a2e;
+            font-weight: 500;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+        .modal-content {
+            padding: 1.5rem;
+        }
+        .modal-content h3 {
+            font-size: 1.6rem;
+            font-weight: 600;
+            color: #2c5e2e;
+            border-left: 5px solid #ffb347;
+            padding-left: 12px;
+            margin-bottom: 12px;
+        }
+        .modal-story {
+            color: #2a3b1f;
+            line-height: 1.5;
+            margin: 15px 0;
+            font-size: 1rem;
+        }
+        .modal-tag {
+            background: #f1f9eb;
+            padding: 6px 12px;
+            border-radius: 50px;
+            font-size: 0.75rem;
+            color: #4a6e3b;
+            display: inline-block;
+            margin-top: 8px;
+        }
+        .close-btn {
+            background: #2c5e2e;
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 40px;
+            font-size: 0.9rem;
+            margin-top: 16px;
+            width: 100%;
+            cursor: pointer;
+            transition: 0.15s;
+            font-weight: 500;
+        }
+        .close-btn:hover {
+            background: #1c421e;
+        }
+
+        /* 节气小通知 (趣味扩展示例) */
+        .season-card {
+            margin: 0 1.8rem 1.8rem 1.8rem;
+            background: linear-gradient(115deg, #fff3cf 0%, #e5f7db 100%);
+            border-radius: 1.5rem;
+            padding: 0.9rem 1.3rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+            border: 1px solid #d6e2c2;
+        }
+        .season-text {
+            font-weight: 500;
+            color: #426331;
+        }
+        .season-text span {
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+        .remind-btn {
+            background: #ffb347;
+            border: none;
+            padding: 6px 18px;
+            border-radius: 40px;
+            font-weight: 600;
+            color: #2c3b1f;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: 0.1s;
+        }
+        .remind-btn:active {
+            transform: scale(0.96);
+        }
+
+        /* 简单响应式 */
+        @media (max-width: 680px) {
+            body {
+                padding: 12px;
+            }
+            .garden-header h1 {
+                font-size: 1.3rem;
+            }
+            .map-area {
+                padding: 1rem;
+            }
+            .modal-content h3 {
+                font-size: 1.3rem;
+            }
+            .season-card {
+                margin: 0 1rem 1.5rem 1rem;
+            }
+            .info-tip {
+                font-size: 0.7rem;
+            }
+        }
+
+        /* 可选热区hover高亮辅助 (image map不支持css hover area, 但为了视觉反馈增加区域边界提示) */
+        /* 因为image map原生无法用css单独改变area，但我们可以额外加一个SVG层？为了简洁，增加点击说明全局可见即可 */
+        .map-wrapper:hover::after {
+            content: "✨ 彩色区域可点击 ✨";
+            position: absolute;
+            bottom: 12px;
+            right: 16px;
+            background: #00000080;
+            color: white;
+            font-size: 12px;
+            padding: 4px 12px;
+            border-radius: 60px;
+            pointer-events: none;
+            backdrop-filter: blur(4px);
+        }
+        /* 仅用来提示，不影响点击 */
+    </style>
+</head>
+<body>
+
+<div class="garden-container">
+    <div class="garden-header">
+        <h1>邻里共建花园 · 故事地图</h1>
+        <p>🌿 点击花圃、认养牌或长椅，探索居民与志愿者一起创造的温暖瞬间</p>
+        <div class="reminder-badge">🌱 参与共建 · 我们的花园会呼吸</div>
+    </div>
+
+    <div class="map-area">
+        <div class="map-wrapper">
+            <!-- 使用 image map: 展示总平面图.jpg -->
+            <img src="总平面图.jpg" 
+                 alt="花园总平面图，可点击花圃、认养牌、长椅等区域" 
+                 class="interactive-map" 
+                 usemap="#gardenMap"
+                 onerror="this.onerror=null; this.src='https://placehold.co/1200x800/e2e8d5/3c5e2e?text=总平面图.jpg+%E5%8D%B3%E5%B0%86%E4%B8%8A%E4%BC%A0'; this.alt='花园平面图占位';">
+            
+            <!-- 定义热区映射 —— 三个示例元素: 花圃区、认养牌、休闲长椅 -->
+            <map name="gardenMap">
+                <!-- 花圃区: 圆形区域, 坐标大致在图片左中区域 (根据常见平面图比例设定, 图片宽高自适应, 坐标按原始图片比例，因为是relative坐标，浏览器自动处理) -->
+                <area shape="circle" coords="280,320,65" href="javascript:void(0);" data-story="flowerbed" alt="多彩花圃" title="点击查看花圃故事">
+                <!-- 认养牌: 矩形区域 右侧区域 -->
+                <area shape="rect" coords="650,180,790,260" href="javascript:void(0);" data-story="adopt" alt="邻里认养牌" title="点击查看认养牌故事">
+                <!-- 休闲长椅: 多边形 或者矩形 左下方 -->
+                <area shape="rect" coords="130,550,290,630" href="javascript:void(0);" data-story="bench" alt="社区长椅" title="点击查看长椅故事">
+                <!-- 为了丰富，再增加一个香草园圃 -->
+                <area shape="circle" coords="730,560,55" href="javascript:void(0);" data-story="herb" alt="香草螺旋花园" title="点击查看香草园故事">
+            </map>
+        </div>
+        <div class="info-tip">
+            <span>🌸 <i>花圃区</i> | 向日葵与绣球花海</span>
+            <span>🏅 <i>认养牌</i> | 爱心家庭认养故事</span>
+            <span>🪑 <i>休闲长椅</i> | 花间会谈</span>
+            <span>🌿 <i>香草螺旋园</i> | 疗愈角落</span>
+            <span style="background:#f5e2b0;">👇 点击图片中发光区域，弹出共建故事</span>
+        </div>
+    </div>
+
+    <!-- 趣味节气养护提醒 扩展功能 （不干扰主要交互）-->
+    <div class="season-card" id="seasonWidget">
+        <div class="season-text">
+            📅 今日节气 · <span id="solarTerm">谷雨</span><br>
+            ✨ 养护提醒：<span id="reminderText">雨后适合松土，月季追肥正当时~</span>
+        </div>
+        <button class="remind-btn" id="refreshReminder">🌱 换个提醒</button>
+    </div>
+</div>
+
+<!-- 模态框弹窗（统一展示故事和媒体）-->
+<div id="storyModal" class="modal">
+    <div class="modal-card">
+        <div class="modal-media" id="modalMedia">
+            <!-- 动态填充图片或视频占位符 -->
+        </div>
+        <div class="modal-content">
+            <h3 id="modalTitle">花圃共建故事</h3>
+            <div class="modal-story" id="modalStory">
+                居民李阿姨带领孩子们一起播种了这片花圃，每一株都是邻里间的情谊。
+            </div>
+            <div class="modal-tag" id="modalExtra">👥 志愿者：12人 · 共建时间：2025年春</div>
+            <button class="close-btn" id="closeModalBtn">关闭 ✨</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 定义每个热区对应的故事内容（文本+媒体资源，目前媒体展示示意图片，未来可换成AI生成的短视频）
+    // 因为用户后续会使用可灵等工具转换视频，这里预留结构，目前使用示例图片（unsplash占位或者社区图片模拟）
+    // 同时为了展现“视频”替代方案，其中一个故事可以使用视频占位符示意；其他故事用静态图示意。
+    const storiesDB = {
+        flowerbed: {
+            title: "🌻 童心花圃 · 彩虹接力",
+            story: "这块花圃原本是杂草丛生的转角，2024年春天，15位社区小志愿者和园艺师王爷爷一同翻土、育苗、设计种植带。如今这里有金鸡菊、鼠尾草和百日草，四季交替绽放。居民说这是「会微笑的花圃」。",
+            mediaType: "image",
+            mediaSrc: "https://picsum.photos/id/144/800/500",   // 免费示例图片，展示花园实感 (可替换为真实照片)
+            extraTag: "👧🏻 小小志愿者12人 | 累计服务32小时 | 2024春"
+        },
+        adopt: {
+            title: "🏷️ 认养牌 · 陈奶奶的月季园",
+            story: "75岁的陈奶奶主动认养了这块月季区，每周三清晨都能看到她修剪枝条的身影。她说「花草就像老朋友，互相惦记」。认养牌上写着：爱心浇灌，芬芳共享。",
+            mediaType: "image",
+            mediaSrc: "https://picsum.photos/id/152/800/500",   // 花朵近景
+            extraTag: "❤️ 认养人：陈秀英 & 睦邻小组 | 2024年至今"
+        },
+        bench: {
+            title: "🪑 邻里聊天椅 · 记忆长椅",
+            story: "这把长椅由木工爱好者老张和三家邻居共同翻新制作，木材来自社区旧改留下的木料。如今是大家歇脚、聊聊植物生长的角落。上面刻着「一起慢慢变老，一起慢慢变好」。",
+            mediaType: "videoPlaceholder",  // 演示视频占位 后续可替换 AI 短视频
+            mediaSrc: "",   // 占位显示提示
+            extraTag: "🪚 老张木工班 & 7户邻居 | 2024.10 落成"
+        },
+        herb: {
+            title: "🌿 螺旋香草园 · 疗愈之角",
+            story: "按照朴门理念设计的螺旋香草园，种植了迷迭香、薄荷、百里香。社区爱好食疗的志愿者们定期举办「闻香下午茶」，用新鲜香草泡茶，分享种植喜悦。",
+            mediaType: "image",
+            mediaSrc: "https://picsum.photos/id/45/800/500",
+            extraTag: "🌱 朴门工作坊 | 2025.03 完成 | 疗愈志愿者: 小梅医生"
+        }
+    };
+
+    // 额外视频占位的构造内容 (符合不写代码也能参与，预留AI视频替换)
+    // 为长椅故事生成自定义占位（示意未来加入可灵 / Runway 短视频）
+    // 在媒体区域显示带有说明的占位块，表示可以替换成视频
+
+    // 获取DOM元素
+    const modal = document.getElementById('storyModal');
+    const modalMediaDiv = document.getElementById('modalMedia');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalStory = document.getElementById('modalStory');
+    const modalExtra = document.getElementById('modalExtra');
+    const closeBtn = document.getElementById('closeModalBtn');
+
+    // 点击地图区域时, 通过area的data-story属性查找对应内容
+    const areas = document.querySelectorAll('map area');
+    
+    function openStory(storyKey) {
+        const data = storiesDB[storyKey];
+        if (!data) return;
+        
+        // 设置标题、故事、额外标记
+        modalTitle.innerText = data.title;
+        modalStory.innerText = data.story;
+        modalExtra.innerText = data.extraTag;
+        
+        // 根据 mediaType 渲染媒体区域 (图片/视频占位)
+        modalMediaDiv.innerHTML = ''; // 清空
+        if (data.mediaType === 'image') {
+            const img = document.createElement('img');
+            img.src = data.mediaSrc;
+            img.alt = data.title;
+            img.style.width = '100%';
+            img.style.display = 'block';
+            modalMediaDiv.appendChild(img);
+        } 
+        else if (data.mediaType === 'videoPlaceholder') {
+            // 构建一个“AI视频示例占位”，未来可以替换成 .mp4 视频文件，现在指出可替换为AI生成内容
+            const placeDiv = document.createElement('div');
+            placeDiv.className = 'placeholder-video';
+            placeDiv.innerHTML = `
+                <span style="font-size: 2.5rem;">🎬✨</span>
+                <strong>AI短视频 · 即将上线</strong>
+                <p style="font-size: 0.8rem; max-width: 280px;">可使用可灵/Runway将共建照片转为会动的记忆~<br>
+                <span style="background: #fff3b0; display: inline-block; margin-top: 6px; padding: 4px 12px; border-radius:60px;">替换 videos/bench_story.mp4</span></p>
+            `;
+            modalMediaDiv.appendChild(placeDiv);
+        }
+        
+        // 显示模态框
+        modal.style.display = 'flex';
+        document.body.style.overflow = 'hidden'; // 防止背景滚动
+    }
+    
+    // 给所有area绑定点击事件 (注意area坐标为图片热区)
+    areas.forEach(area => {
+        area.addEventListener('click', (e) => {
+            e.preventDefault();
+            const storyId = area.getAttribute('data-story');
+            if (storyId && storiesDB[storyId]) {
+                openStory(storyId);
+            } else {
+                // 默认备用
+                openStory('flowerbed');
+            }
+        });
+        // 增加触摸/鼠标样式
+        area.style.cursor = 'pointer';
+    });
+    
+    // 关闭弹窗
+    function closeModal() {
+        modal.style.display = 'none';
+        document.body.style.overflow = '';
+        // 清空媒体，以免残留video释放
+        // 但保留后续再次打开不会出错
+    }
+    closeBtn.addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            closeModal();
+        }
+    });
+    // 按ESC关闭
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && modal.style.display === 'flex') {
+            closeModal();
+        }
+    });
+    
+    // ---------- 节气趣味扩展功能 (动态提醒，结合当前日期模拟谷雨/立夏等) ----------
+    // 一个简易节气表 + 养护提醒库，展示趣味但不复杂
+    const solarTerms = [
+        { name: "立春", monthDay: "2/3", remind: "乍暖还寒，注意防冻，早春花卉可施薄肥。" },
+        { name: "雨水", monthDay: "2/18", remind: "降雨增多，清沟排水，盆栽避免积水。" },
+        { name: "惊蛰", monthDay: "3/5", remind: "春虫萌动，检查植物病虫害，松土施肥。" },
+        { name: "春分", monthDay: "3/20", remind: "平衡昼夜，适合播种向日葵、波斯菊。" },
+        { name: "清明", monthDay: "4/4", remind: "种瓜点豆，花后修剪，给月季追肥。" },
+        { name: "谷雨", monthDay: "4/19", remind: "雨生百谷，栽植药草，增加有机覆盖。" },
+        { name: "立夏", monthDay: "5/5", remind: "植物旺盛生长，勤浇水，悬挂诱虫板。" },
+        { name: "小满", monthDay: "5/20", remind: "未病先防，修剪残花，促进复花。" },
+        { name: "芒种", monthDay: "6/5", remind: "夏播正忙，注意遮阴保湿，防治红蜘蛛。" },
+        { name: "夏至", monthDay: "6/21", remind: "日照最长，清晨或傍晚浇水，避开暴晒。" }
+    ];
+    
+    // 获取当前近似节气 (基于月日简单比对，用于demo)
+    function getCurrentSolarTerm() {
+        const now = new Date();
+        const month = now.getMonth() + 1;
+        const day = now.getDate();
+        const md = `${month}/${day}`;
+        // 精确查找今日或最近节气；为了演示，找出距今天最近的节气（差值绝对值）
+        let bestTerm = solarTerms[5]; // 默认谷雨
+        let minDiff = 999;
+        for (let term of solarTerms) {
+            const [m, d] = term.monthDay.split('/').map(Number);
+            const termDate = new Date(now.getFullYear(), m-1, d);
+            const diff = Math.abs(termDate - now);
+            if (diff < minDiff) {
+                minDiff = diff;
+                bestTerm = term;
+            }
+        }
+        return bestTerm;
+    }
+    
+    // 养护随机小提示库（增加趣味）
+    const extraReminders = [
+        "🌧️ 雨后蜗牛出没，可撒蛋壳粉保护幼苗。",
+        "🌼 修剪残花能鼓励更多花开哦~",
+        "💧 用淘米水发酵后浇花，环保又营养。",
+        "🐞 发现蚜虫？喷点肥皂水轻松解决！",
+        "🌱 播种前用温水浸泡种子，发芽更快。",
+        "🍂 覆盖树皮保湿，让土壤更健康。",
+        "🌿 迷迭香喜欢阳光，记得给它转盆。",
+        "🌺 为绣球调色：酸性土开花蓝，碱性土开花粉。"
+    ];
+    
+    function updateSeasonWidget() {
+        const term = getCurrentSolarTerm();
+        const solarSpan = document.getElementById('solarTerm');
+        const remindSpan = document.getElementById('reminderText');
+        if (solarSpan) solarSpan.innerText = term.name;
+        // 显示节气的专业提醒 + 随机趣味提醒之一混合
+        let combined = term.remind;
+        // 随机概率展示额外趣味提醒，让内容更生动 (但不覆盖本质)
+        const randomExtra = extraReminders[Math.floor(Math.random() * extraReminders.length)];
+        if (Math.random() > 0.6) {
+            combined = combined + " " + randomExtra;
+        }
+        if (remindSpan) remindSpan.innerText = combined;
+    }
+    
+    // “换个提醒” 按钮：刷新养护提示，且保留节气名，随机更换趣味提醒
+    const refreshBtn = document.getElementById('refreshReminder');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', () => {
+            const term = getCurrentSolarTerm();
+            const solarSpan = document.getElementById('solarTerm');
+            const remindSpan = document.getElementById('reminderText');
+            if (solarSpan) solarSpan.innerText = term.name;
+            // 随机从extraReminders中选一条，并且可选加上节气固定语
+            const randomTip = extraReminders[Math.floor(Math.random() * extraReminders.length)];
+            const choice = Math.random() > 0.3 ? randomTip : term.remind;
+            if (remindSpan) remindSpan.innerText = choice + (choice === term.remind ? "" : " 🌟");
+        });
+    }
+    
+    // 页面加载时初始化节气提醒
+    updateSeasonWidget();
+    
+    // 可选：图片加载失败时，提示友好信息（用户上传真实总平面图.jpg后失效; 若占位图展现依然交互）
+    // 增加图片错误时替换base64提示，避免热区失效，提示上传真实图片。
+    const mapImg = document.querySelector('.interactive-map');
+    if (mapImg) {
+        mapImg.addEventListener('error', () => {
+            // 如果真实总平面图.jpg不存在，展示备用说明，但保留热区功能。
+            mapImg.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 700'%3E%3Crect width='100%25' height='100%25' fill='%23cbdbb8'/%3E%3Ctext x='50%25' y='45%25' font-size='26' fill='%233c5e2e' text-anchor='middle' dominant-baseline='middle'%3E🌻 总平面图.jpg%3C/text%3E%3Ctext x='50%25' y='55%25' font-size='18' fill='%23365c2c' text-anchor='middle'%3E请将地图图片命名为 '总平面图.jpg' 放在同目录%3C/text%3E%3C/svg%3E";
+            mapImg.alt = "花园平面图占位，请上传真实总平面图.jpg";
+        });
+    }
+    
+    // 加上适配说明：如果图片显示，热区坐标基于原始图片尺寸会自动适应，因为map配合img的width百分比会自动缩放坐标
+    // 建议实际使用时保持总平面图宽高比例，坐标按照图片原始尺寸（示例坐标针对约1000*700的虚拟图参考）
+    // 用户可后续依据真实平面图微调坐标，但当前示例已完全可用：四个故事元素可以触发
+    console.log("花园交互地图已启动，点击图片中花圃/认养牌/长椅/香草园体验故事和AI视频占位");
+</script>
+</body>
+</html>
+```
